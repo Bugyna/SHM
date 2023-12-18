@@ -10,6 +10,7 @@
 
 
 #define SHM_WARN(...) SHM_DEBUG("warning: ", __VA_ARGS__)
+#define SHM_ERROR(...) SHM_DEBUG("SHM ERROR: ", __VA_ARGS__); exit(-1)
 
 #define __ITERATE_HASHMAP(MAP_TYPE, MAP, VAL_TYPE, KEY)\
 MAP_TYPE##_BUCKET* BUCKET = MAP_TYPE##_GET_BUCKET(MAP, KEY);\
@@ -67,6 +68,7 @@ struct NAME \
 };\
 void NAME##_INIT(NAME* hm, int size)\
 {\
+	if (hm == NULL) { SHM_ERROR("trying to initialize null pointer %d %s\n\n", __LINE__, __FILE__); }\
 	if (size < 0) size = 20;\
 	hm->list = calloc(size, sizeof(NAME##_BUCKET));\
 	hm->size = size;\
@@ -80,7 +82,7 @@ static inline NAME##_BUCKET* NAME##_GET_BUCKET_SPECIAL(NAME* hm, const char* key
 	check:\
 	if (b != NULL && b->val && b->key != NULL && strcmp(b->key, key)) { b = b->next; goto check;}\
 	if (b == NULL || b->val == NULL || b->key == NULL) {\
-		SHM_WARN("'%s' could not be found", key);\
+		SHM_WARN("'%s' could not be found\n", key);\
 		return NULL;\
 	}\
 \
@@ -93,7 +95,7 @@ static inline NAME##_BUCKET* NAME##_GET_BUCKET(NAME* hm, const char* key)\
 	check:\
 	if (b != NULL && b->val && b->key != NULL && strcmp(b->key, key)) { b = b->next; goto check;}\
 	if (b == NULL || b->val == NULL || b->key == NULL) {\
-		SHM_WARN("'%s' could not be found", key);\
+		SHM_WARN("'%s' could not be found\n", key);\
 		return NULL;\
 	}\
 \
@@ -108,7 +110,7 @@ static inline NAME##_BUCKET* NAME##_GET_BUCKET_AT_INDEX(NAME* hm, int n)\
 	check:\
 	if (b != NULL && b->key != NULL && strcmp(b->key, key) && b->val != NULL) { b = b->next; goto check;}\
 	if (b == NULL || b->val == NULL || b->key == NULL) {\
-		SHM_WARN("'%s' could not be found", key);\
+		SHM_WARN("'%s' could not be found\n", key);\
 		free(key);\
 		return NULL;\
 	}\
@@ -124,13 +126,13 @@ static inline VAL_TYPE* NAME##_GET(NAME* hm, const char* key)\
 	check:\
 	if (b != NULL && b->val && b->key != NULL && strcmp(b->key, key)) { b = b->next; goto check;}\
 	if (b == NULL || b->val == NULL || b->key == NULL) {\
-		SHM_WARN("'%s' could not be found", key);\
+		SHM_WARN("'%s' could not be found\n", key);\
 		return NULL;\
 	}\
 \
 	return b->val;\
 }\
-static inline void NAME##_ADD(NAME* hm, const char* key, VAL_TYPE* val)\
+static inline VAL_TYPE* NAME##_ADD(NAME* hm, const char* key, VAL_TYPE* val)\
 {\
 	int h = hash(key) % hm->size;\
 	NAME##_BUCKET* b = &hm->list[h];\
@@ -147,6 +149,7 @@ static inline void NAME##_ADD(NAME* hm, const char* key, VAL_TYPE* val)\
 		b->next->key = NULL;\
 	}\
 	hm->occupied++;\
+	return b->val;\
 }\
 \
 static inline void NAME##_ADD_AT_INDEX(NAME* hm, int n, VAL_TYPE* val)\

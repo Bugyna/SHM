@@ -3,14 +3,23 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
+#include <stdint.h>
+
+#define u64 uint64_t
 
 #ifndef SHM_DEBUG
 #define SHM_DEBUG(s, ...) printf(s __VA_ARGS__);
 #endif
 
 
-#define SHM_WARN(...) SHM_DEBUG("warning: ", __VA_ARGS__)
 #define SHM_ERROR(...) SHM_DEBUG("SHM ERROR: ", __VA_ARGS__); exit(-1)
+
+#ifdef SHM_REPORTING
+#else
+#define SHM_WARN(...) 
+#endif
+
 
 #define __ITERATE_HASHMAP(MAP_TYPE, MAP, VAL_TYPE, KEY)\
 MAP_TYPE##_BUCKET* BUCKET = MAP_TYPE##_GET_BUCKET(MAP, KEY);\
@@ -63,10 +72,10 @@ struct NAME##_BUCKET\
 struct NAME \
 {\
 	NAME##_BUCKET* list;\
-	int size, occupied;\
+	size_t size, occupied;\
 	__VA_ARGS__\
 };\
-void NAME##_INIT(NAME* hm, int size)\
+void NAME##_INIT(NAME* hm, size_t size)\
 {\
 	if (hm == NULL) { SHM_ERROR("trying to initialize null pointer %d %s\n\n", __LINE__, __FILE__); }\
 	if (size < 0) size = 20;\
@@ -134,7 +143,7 @@ static inline VAL_TYPE* NAME##_GET(NAME* hm, const char* key)\
 }\
 static inline VAL_TYPE* NAME##_ADD(NAME* hm, const char* key, VAL_TYPE* val)\
 {\
-	int h = hash(key) % hm->size;\
+	size_t h = hash(key) % hm->size;\
 	NAME##_BUCKET* b = &hm->list[h];\
 \
 	int i = 0;\

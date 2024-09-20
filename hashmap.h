@@ -12,7 +12,7 @@
 #define SHM_DEBUG(s, ...) printf(s __VA_ARGS__);
 #endif
 
-
+#define SHM_LOG(...) SHM_DEBUG("SHM LOG: ", __VA_ARGS__);
 #define SHM_ERROR(...) SHM_DEBUG("SHM ERROR: ", __VA_ARGS__); exit(-1)
 
 #ifdef SHM_REPORTING
@@ -59,12 +59,12 @@ for (; BUCKET != NULL && (VAL_NAME = BUCKET->val) != NULL; BUCKET = BUCKET->next
 }
 
 
-#define DEFINE_HASHMAP(NAME, VAL_TYPE, ...)\
+#define DEF_HASHMAP(NAME, VAL_TYPE, ...)\
 typedef struct NAME NAME;\
 typedef struct NAME##_BUCKET NAME##_BUCKET;\
 struct NAME##_BUCKET\
 {\
-	const char* key;\
+	char* key;\
 	VAL_TYPE* val;\
 \
 	NAME##_BUCKET* next;\
@@ -75,16 +75,31 @@ struct NAME \
 	size_t size, occupied;\
 	__VA_ARGS__\
 };\
-void NAME##_INIT(NAME* hm, size_t size)\
+void NAME##_INIT(NAME* hm, int size);\
+NAME##_BUCKET* NAME##_GET_BUCKET_SPECIAL(NAME* hm, char* key);\
+NAME##_BUCKET* NAME##_GET_BUCKET(NAME* hm, char* key);\
+NAME##_BUCKET* NAME##_GET_BUCKET_AT_INDEX(NAME* hm, int n);\
+VAL_TYPE* NAME##_GET(NAME* hm, char* key);\
+VAL_TYPE* NAME##_ADD(NAME* hm, char* key, VAL_TYPE* val);\
+void NAME##_ADD_AT_INDEX(NAME* hm, int n, VAL_TYPE* val);\
+void NAME##_ADD_COPY(NAME* hm, char* key, VAL_TYPE* val);\
+void NAME##_ADD_COPY_AT_INDEX(NAME* hm, int n, VAL_TYPE* val);\
+void NAME##_ADD_DUPLICATE(NAME* hm, char* key, VAL_TYPE* val);\
+void NAME##_REMOVE(NAME* hm, char* key);\
+
+
+#define IMPL_HASHMAP(NAME, VAL_TYPE, ...)\
+void NAME##_INIT(NAME* hm, int size)\
 {\
 	if (hm == NULL) { SHM_ERROR("trying to initialize null pointer %d %s\n\n", __LINE__, __FILE__); }\
 	if (size < 0) size = 20;\
+	SHM_LOG("Initializing hashmap with size of: %ld\n", size);\
 	hm->list = calloc(size, sizeof(NAME##_BUCKET));\
 	hm->size = size;\
 	hm->occupied = 0;\
 }\
 \
-static inline NAME##_BUCKET* NAME##_GET_BUCKET_SPECIAL(NAME* hm, const char* key)\
+NAME##_BUCKET* NAME##_GET_BUCKET_SPECIAL(NAME* hm, char* key)\
 {\
 	int h = hash(key) % hm->size;\
 	NAME##_BUCKET* b = &hm->list[h];\
@@ -97,7 +112,7 @@ static inline NAME##_BUCKET* NAME##_GET_BUCKET_SPECIAL(NAME* hm, const char* key
 \
 	return b;\
 }\
-static inline NAME##_BUCKET* NAME##_GET_BUCKET(NAME* hm, const char* key)\
+NAME##_BUCKET* NAME##_GET_BUCKET(NAME* hm, char* key)\
 {\
 	int h = hash(key) % hm->size;\
 	NAME##_BUCKET* b = &hm->list[h];\
@@ -110,10 +125,9 @@ static inline NAME##_BUCKET* NAME##_GET_BUCKET(NAME* hm, const char* key)\
 \
 	return b;\
 }\
-static inline NAME##_BUCKET* NAME##_GET_BUCKET_AT_INDEX(NAME* hm, int n)\
+NAME##_BUCKET* NAME##_GET_BUCKET_AT_INDEX(NAME* hm, int n)\
 {\
 	char* key = calloc(20, sizeof(char));\
-	sprintf(key, "%d", n);\
 	int h = hash(key) % hm->size;\
 	NAME##_BUCKET* b = &hm->list[h];\
 	check:\
@@ -127,13 +141,13 @@ static inline NAME##_BUCKET* NAME##_GET_BUCKET_AT_INDEX(NAME* hm, int n)\
 	free(key);\
 	return b;\
 }\
-static inline VAL_TYPE* NAME##_GET(NAME* hm, const char* key)\
+VAL_TYPE* NAME##_GET(NAME* hm, char* key)\
 {\
 	int h = hash(key) % hm->size;\
 	NAME##_BUCKET* b = &hm->list[h];\
 \
 	check:\
-	if (b != NULL && b->val && b->key != NULL && strcmp(b->key, key)) { b = b->next; goto check;}\
+	if (b != NULL && b->val != NULL && b->key != NULL && strcmp(b->key, key)) { b = b->next; goto check;}\
 	if (b == NULL || b->val == NULL || b->key == NULL) {\
 		SHM_WARN("'%s' could not be found\n", key);\
 		return NULL;\
@@ -141,16 +155,17 @@ static inline VAL_TYPE* NAME##_GET(NAME* hm, const char* key)\
 \
 	return b->val;\
 }\
-static inline VAL_TYPE* NAME##_ADD(NAME* hm, const char* key, VAL_TYPE* val)\
+VAL_TYPE* NAME##_ADD(NAME* hm, char* key, VAL_TYPE* val)\
 {\
-	size_t h = hash(key) % hm->size;\
-	NAME##_BUCKET* b = &hm->list[h];\
+	size_t h = hash(key);\
+	NAME##_BUCKET* b = &hm->list[(h % hm->size)];\
 \
 	int i = 0;\
 	check:\
 	if (b != NULL && b->val != NULL && b->key != NULL && b->next != NULL) { b = b->next; goto check;}\
 \
-	b->key = key;\
+	b->key = calloc(strlen(key), 1);\
+	strcpy(b->key, key);\
 	b->val = val;\
 \
 	if (b->next == NULL) {\
@@ -161,7 +176,7 @@ static inline VAL_TYPE* NAME##_ADD(NAME* hm, const char* key, VAL_TYPE* val)\
 	return b->val;\
 }\
 \
-static inline void NAME##_ADD_AT_INDEX(NAME* hm, int n, VAL_TYPE* val)\
+void NAME##_ADD_AT_INDEX(NAME* hm, int n, VAL_TYPE* val)\
 {\
 	char* key = calloc(20, sizeof(char));\
 	sprintf(key, "%d", n);\
@@ -182,7 +197,7 @@ static inline void NAME##_ADD_AT_INDEX(NAME* hm, int n, VAL_TYPE* val)\
 	hm->occupied++;\
 }\
 \
-static inline void NAME##_ADD_COPY(NAME* hm, const char* key, VAL_TYPE* val)\
+void NAME##_ADD_COPY(NAME* hm, char* key, VAL_TYPE* val)\
 {\
 	int h = hash(key) % hm->size;\
 	NAME##_BUCKET* b = &hm->list[h];\
@@ -202,7 +217,7 @@ static inline void NAME##_ADD_COPY(NAME* hm, const char* key, VAL_TYPE* val)\
 	hm->occupied++;\
 }\
 \
-static inline void NAME##_ADD_COPY_AT_INDEX(NAME* hm, int n, VAL_TYPE* val)\
+void NAME##_ADD_COPY_AT_INDEX(NAME* hm, int n, VAL_TYPE* val)\
 {\
 	char* key = calloc(20, sizeof(char));\
 	sprintf(key, "%d", n);\
@@ -224,7 +239,7 @@ static inline void NAME##_ADD_COPY_AT_INDEX(NAME* hm, int n, VAL_TYPE* val)\
 	hm->occupied++;\
 }\
 \
-static inline void NAME##_ADD_DUPLICATE(NAME* hm, const char* key, VAL_TYPE* val)\
+void NAME##_ADD_DUPLICATE(NAME* hm, char* key, VAL_TYPE* val)\
 {\
 	int h = hash(key) % hm->size;\
 	NAME##_BUCKET* b = &hm->list[h];\
@@ -244,7 +259,7 @@ static inline void NAME##_ADD_DUPLICATE(NAME* hm, const char* key, VAL_TYPE* val
 	hm->occupied++;\
 }\
 \
-static inline void NAME##_REMOVE(NAME* hm, const char* key)\
+void NAME##_REMOVE(NAME* hm, char* key)\
 {\
 	NAME##_BUCKET* b = NAME##_GET_BUCKET(hm, key);\
 	NAME##_BUCKET* tmp = b->next;\
@@ -259,7 +274,9 @@ static inline void NAME##_REMOVE(NAME* hm, const char* key)\
 
 
 
-
+#define DEFINE_HASHMAP(NAME, VAL_TYPE, ...)\
+DEF_HASHMAP(NAME, VAL_TYPE, __VA_ARGS__)\
+IMPL_HASHMAP(NAME, VAL_TYPE, __VA_ARGS__)
 
 
 
